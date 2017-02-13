@@ -55,6 +55,41 @@ class StripeProvider(BasicProvider):
         return Decimal(amount) / 100
 
 
+class StripeCheckoutProvider(BasicProvider):
+    """
+    A provider based on Stripe Checkout flow.
+    @see https://stripe.com/docs/checkout
+
+    This is a charge only utility.
+    Data is collected on checkout and captured later.
+    @see https://stripe.com/docs/charges
+    """
+
+    def __init__(self, secret_key, **kwargs):
+        stripe.api_key = secret_key
+        self.secret_key = secret_key
+        super(StripeCheckoutProvider, self).__init__(**kwargs)
+
+    def capture(self, payment, amount=None):
+        amount = int((amount or payment.total) * 100)
+        token = payment.remote_token
+        try:
+            charge = stripe.Charge.create(
+                amount=amount,
+                currency=payment.currency,
+                description=payment.description,
+                source=token,)
+        except stripe.InvalidRequestError as err:
+            raise PaymentError('Payment capture failed ' + str(err.message))
+        payment.attrs.capture = stripe.util.json.dumps(charge)
+        return Decimal(amount) / 100
+
+    def release(self, payment):
+        raise PaymentError('Stripe Checkout does not need to release.')
+
+    def refund(self, payment, amount=None):
+        raise PaymentError('Stripe Checkout does not allow refunds.')
+
 class StripeCardProvider(StripeProvider):
 
     form_class = PaymentForm
